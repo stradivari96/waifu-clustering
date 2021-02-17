@@ -1,4 +1,5 @@
 import json
+import statistics
 from itertools import combinations
 from pathlib import Path
 
@@ -39,6 +40,9 @@ if __name__ == "__main__":
             if a != b:
                 links[a, b] += 1
 
-    links = [{"source": a, "target": b, "value": v} for (a, b), v in links.items()]
+    # TODO: https://stackoverflow.com/a/29019886/7810777
+    links = [
+        {"source": a, "target": b, "value": 1 / (1 + v)} for (a, b), v in links.items()
+    ]
     with open(project_root / "frontend" / "src" / "waifu_links.json", "w") as f:
         json.dump(links, f)

@@ -22,7 +22,7 @@ function App() {
   };
   useEffect(() => {
     fgRef.current.d3Force("collide", d3.forceCollide().radius(10));
-    fgRef.current.d3Force("link").distance((link) => 500 - link.value);
+    fgRef.current.d3Force("link").distance((link) => 300_000 * link.value);
   }, []);
 
   return (
@@ -31,7 +31,7 @@ function App() {
         ref={fgRef}
         graphData={data}
         nodeCanvasObject={({ img, x, y }, ctx) => {
-          const size = 12;
+          const size = 30;
           ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
         }}
       />
