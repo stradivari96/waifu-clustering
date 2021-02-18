@@ -1,15 +1,19 @@
 import json
-import statistics
-from itertools import combinations
+from itertools import combinations, product
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parents[1]
 
 if __name__ == "__main__":
-    min_rank = 150
+    max_rank = 1000
 
     with open(project_root / "data" / "waifus.json") as f:
         waifus = json.load(f)
+    valid_waifus_ids = {
+        w["id"]
+        for w in waifus.values()
+        if w.get("like_rank") and w["like_rank"] <= max_rank
+    }
 
     nodes = [
         {
@@ -19,7 +23,7 @@ if __name__ == "__main__":
             "like_rank": w["like_rank"],
         }
         for w in waifus.values()
-        if (w.get("like_rank") or 1000) <= min_rank
+        if w and w["id"] in valid_waifus_ids
     ]
     with open(project_root / "frontend" / "src" / "waifus.json", "w") as f:
         json.dump(nodes, f)
@@ -30,19 +34,28 @@ if __name__ == "__main__":
     for user in users.values():
         if len(user["liked"]) <= 1:
             continue
-        liked = [
-            w
-            for w in user["liked"]
-            if (waifus[str(w)].get("like_rank") or 1000) <= min_rank
-        ]
+        # Like
+        liked = [w for w in user["liked"] if w in valid_waifus_ids]
         liked = sorted(liked)
         for a, b in combinations(liked, 2):
             if a != b:
                 links[a, b] += 1
+        # Trash
+        # trashed = [w for w in user["trashed"] if w in valid_waifus_ids]
+        # trashed = sorted(trashed)
+        # for a, b in combinations(trashed, 2):
+        #     if a != b:
+        #         links[a, b] += 0.1
+        # Like x Trash
+        # for a, b in product(liked, trashed):
+        #     a, b = sorted([a, b])
+        #     if a != b:
+        #         links[a, b] -= 0.1
 
-    # TODO: https://stackoverflow.com/a/29019886/7810777
+    # TODO: correct impopular waifus values
     links = [
-        {"source": a, "target": b, "value": 1 / (1 + v)} for (a, b), v in links.items()
+        {"source": a, "target": b, "value": 1 / (1 + max(v, 0))}
+        for (a, b), v in links.items()
     ]
     with open(project_root / "frontend" / "src" / "waifu_links.json", "w") as f:
         json.dump(links, f)

@@ -5,29 +5,53 @@ import * as d3 from "d3";
 import waifus from "./waifus.json";
 import waifu_links from "./waifu_links.json";
 
-const calculateAvg = (arr) => arr.reduce((a, b) => a + b) / arr.length;
-const data = {
-  nodes: Object.values(waifus).map((node) => {
-    const img = new Image();
-    img.src = node.display_picture;
+const maxRank = 300;
+const maxLinks = 3;
+const size = 100;
 
-    return {
-      id: node.id,
-      text: node.name,
-      img,
-    };
-  }),
-  links: waifu_links,
+const validIds = new Set(
+  waifus.filter(({ like_rank }) => like_rank <= maxRank).map((w) => w.id)
+);
+
+const links = waifu_links.filter(
+  ({ source, target }) => validIds.has(source) && validIds.has(target)
+);
+
+for (let id of validIds) {
+  const waifuLinks = links.filter(
+    ({ source, target }) => source === id || target === id
+  );
+
+  waifuLinks
+    .sort((a, b) => a.value - b.value)
+    .slice(0, maxLinks)
+    .forEach((link) => {
+      link.visible = true;
+    });
+}
+
+const data = {
+  nodes: Object.values(waifus)
+    .filter((w) => validIds.has(w.id))
+    .map((node) => {
+      const img = new Image();
+      img.src = node.display_picture;
+
+      return {
+        id: node.id,
+        text: node.name,
+        img,
+      };
+    }),
+  links,
 };
 
 function App() {
   const fgRef = useRef();
-  const size = 30;
-  const avgLinkValue = calculateAvg(waifu_links.map((a) => a.value));
 
   useEffect(() => {
-    fgRef.current.d3Force("collide", d3.forceCollide().radius(15));
-    fgRef.current.d3Force("link").distance((link) => 300_000 * link.value);
+    fgRef.current.d3Force("collide", d3.forceCollide().radius(size / 2));
+    fgRef.current.d3Force("link").distance((link) => 1_000_000 * link.value);
   }, []);
 
   return (
@@ -43,7 +67,7 @@ function App() {
           ctx.fillRect(x, y, size, size);
           ctx.drawImage(img, x, y, size, size);
         }}
-        linkVisibility={(link) => link.value < avgLinkValue}
+        linkVisibility={(link) => link.visible}
       />
     </div>
   );
