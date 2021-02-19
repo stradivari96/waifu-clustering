@@ -2,6 +2,9 @@ import json
 from itertools import combinations, product
 from pathlib import Path
 
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+
 project_root = Path(__file__).resolve().parents[1]
 
 if __name__ == "__main__":
@@ -53,8 +56,10 @@ if __name__ == "__main__":
         #         links[a, b] -= 0.1
 
     # TODO: correct impopular waifus values
+    scaler = MinMaxScaler()
+    scaler.fit(np.array(list(links.values())).reshape(-1, 1))
     links = [
-        {"source": a, "target": b, "value": 1 / (1 + max(v, 0))}
+        {"source": a, "target": b, "value": 1 / (1 + scaler.transform([[v]])[0][0])}
         for (a, b), v in links.items()
     ]
     with open(project_root / "frontend" / "src" / "waifu_links.json", "w") as f:

@@ -27,6 +27,7 @@ for (let id of validIds) {
     .slice(0, maxLinks)
     .forEach((link) => {
       link.visible = true;
+      link.value -= 0.2;
     });
 }
 
@@ -51,7 +52,7 @@ function App() {
 
   useEffect(() => {
     fgRef.current.d3Force("collide", d3.forceCollide().radius(size / 2));
-    fgRef.current.d3Force("link").distance((link) => 1_000_000 * link.value);
+    fgRef.current.d3Force("link").distance((link) => 4_000 * link.value);
   }, []);
 
   return (
@@ -60,6 +61,8 @@ function App() {
         ref={fgRef}
         graphData={data}
         nodeRelSize={size}
+        d3AlphaDecay={0}
+        cooldownTime="infinity"
         nodeCanvasObject={({ img, x, y }, ctx) => {
           ctx.fillStyle = "#FFFFFF";
           x = x - size / 2;
