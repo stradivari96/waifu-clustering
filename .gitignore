@@ -1,2 +1,24 @@
-.ipynb_checkpoints
+# Dependencies
+node_modules/
+
+# Vite build output
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
 *.sqlite
+data/__pycache__/
+
+# Poetry
+data/.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
