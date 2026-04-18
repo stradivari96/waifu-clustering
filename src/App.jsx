@@ -95,7 +95,7 @@ export default function App() {
   // Load the large links file once
   useEffect(() => {
     async function load() {
-      const res = await fetch('/waifu_links.json')
+      const res = await fetch(`${import.meta.env.BASE_URL}waifu_links.json`)
       const contentLength = +res.headers.get('Content-Length')
       const reader = res.body.getReader()
       const chunks = []
