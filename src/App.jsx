@@ -37,6 +37,7 @@ export default function App() {
   const [cursor, setCursor] = useState({ x: 0, y: 0 })
   const [hoverSource, setHoverSource] = useState(null)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [nodeCount, setNodeCount] = useState(0)
 
   useEffect(() => {
     const onResize = () => {
@@ -101,6 +102,7 @@ export default function App() {
       })
       nodesRef.current = nodes
       nodeByIdRef.current = Object.fromEntries(nodes.map(n => [String(n.id), n]))
+      setNodeCount(nodes.length)
       setReady(true)
     }).catch(() => setLayoutError(true))
   }, [colorMap])
@@ -203,7 +205,6 @@ export default function App() {
     ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y)
 
     const showPortrait = t.k > 0.35   // portraits when nodes ≥ ~5px radius
-    const showLabel = t.k > 1.4        // labels when nodes ≥ ~20px radius
 
     // ---- Link overlay for hovered / selected node ----
     const activeNode = selected ?? hovered
@@ -267,8 +268,8 @@ export default function App() {
         ctx.save()
         ctx.clip()
         ctx.shadowBlur = 0
-        const size = r * 2
-        const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight)
+        const diameter = r * 2
+        const scale = Math.max(diameter / img.naturalWidth, diameter / img.naturalHeight)
         const sw = img.naturalWidth * scale
         const sh = img.naturalHeight * scale
         ctx.drawImage(img, x - sw / 2, y - r, sw, sh)
@@ -286,24 +287,41 @@ export default function App() {
       ctx.lineWidth = (isSel ? 3.5 : lit ? 2.5 : 1.5) / t.k
       ctx.stroke()
 
-      // Label
-      if (isHov || isSel || (relatedIds?.has(String(node.id)))) {
-        const fs = 11 / t.k
-        ctx.font = `bold ${fs}px sans-serif`
-        ctx.textAlign = 'center'
-        ctx.shadowBlur = 0
-        const tw = ctx.measureText(node.name).width
-        const pad = 3 / t.k
-        const lx = x - tw / 2 - pad
-        const ly = y + r + 2 / t.k
-        ctx.fillStyle = 'rgba(13,13,26,0.85)'
-        ctx.fillRect(lx, ly, tw + pad * 2, fs + pad * 2)
-        ctx.fillStyle = isHov || isSel ? '#ff69b4' : '#e0c8e0'
-        ctx.textBaseline = 'top'
-        ctx.fillText(node.name, x, ly + pad)
-      }
-
       ctx.restore()
+    }
+
+    // ---- Label pass (separate so collision detection works across all nodes) ----
+    // Priority: selected → hovered → related. Related labels are skipped on overlap.
+    const labelQueue = []
+    if (selected) labelQueue.push(selected)
+    if (hovered && hovered.id !== selected?.id) labelQueue.push(hovered)
+    if (relatedIds) {
+      for (const node of nodes) {
+        if (relatedIds.has(String(node.id)) && node.id !== selected?.id && node.id !== hovered?.id)
+          labelQueue.push(node)
+      }
+    }
+    const drawnRects = []
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.shadowBlur = 0
+    for (const node of labelQueue) {
+      const { wx: x, wy: y, r } = node
+      const isPriority = node.id === selected?.id || node.id === hovered?.id
+      const fs = 11 / t.k
+      ctx.font = `bold ${fs}px sans-serif`
+      const tw = ctx.measureText(node.name).width
+      const pad = 3 / t.k
+      const lx = x - tw / 2 - pad
+      const ly = y + r + 2 / t.k
+      const rw = tw + pad * 2, rh = fs + pad * 2
+      const overlaps = drawnRects.some(d => !(lx + rw < d.x || d.x + d.w < lx || ly + rh < d.y || d.y + d.h < ly))
+      if (!isPriority && overlaps) continue
+      drawnRects.push({ x: lx, y: ly, w: rw, h: rh })
+      ctx.fillStyle = 'rgba(13,13,26,0.85)'
+      ctx.fillRect(lx, ly, rw, rh)
+      ctx.fillStyle = isPriority ? '#ff69b4' : '#e0c8e0'
+      ctx.fillText(node.name, x, ly + pad)
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -347,9 +365,8 @@ export default function App() {
       const d = Math.hypot(n.wx - wx, n.wy - wy)
       if (d <= n.r && d < minD) { minD = d; found = n }
     }
-    const target = found ?? hovered
-    setSelected(prev => target ? (prev?.id === target.id ? null : target) : null)
-  }, [hovered])
+    setSelected(prev => found ? (prev?.id === found.id ? null : found) : null)
+  }, [])
 
   const handleSidebarHover = useCallback((node, e) => {
     setHoverSource('sidebar')
@@ -414,7 +431,7 @@ export default function App() {
           </div>
           <button className="btn-reset" onClick={() => fitView(true)}>Fit</button>
         </div>
-        <span className="status-count">{nodesRef.current.length} waifus · scroll to zoom</span>
+        <span className="status-count">{nodeCount} waifus · scroll to zoom</span>
       </div>
 
       <canvas

@@ -181,6 +181,7 @@ body {
 }
 
 /* Canvas Tooltip (Floating) */
+@media (pointer: coarse) { .canvas-tooltip { display: none; } }
 .canvas-tooltip {
   position: fixed;
   z-index: 1000;
