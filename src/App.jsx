@@ -1,260 +1,327 @@
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useMemo,
-  useCallback,
-  useDeferredValue,
-} from 'react'
-import ForceGraph2D from 'react-force-graph-2d'
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
 import waifusData from './waifus.json'
 
-const MAX_LINKS_PER_NODE = 3
-const NODE_R = 30
+const TOP_SERIES = 12
+const PALETTE = [
+  '#ff6b9d', '#4ecdc4', '#ffe066', '#a78bfa',
+  '#fb923c', '#34d399', '#f472b6', '#60a5fa',
+  '#fbbf24', '#a3e635', '#e879f9', '#2dd4bf',
+]
 
-const waifuMap = new Map(waifusData.map((w) => [w.id, w]))
-
-const imageCache = new Map()
-function getImage(src) {
-  if (!imageCache.has(src)) {
+const imgCache = new Map()
+function loadImg(src) {
+  if (!imgCache.has(src)) {
     const img = new Image()
     img.src = src
-    imageCache.set(src, img)
+    imgCache.set(src, img)
   }
-  return imageCache.get(src)
-}
-
-function buildGraph(allLinks, maxRank) {
-  const validIds = new Set(
-    waifusData.filter((w) => w.like_rank <= maxRank).map((w) => w.id)
-  )
-
-  const filtered = allLinks.filter(
-    (l) => validIds.has(l.source) && validIds.has(l.target)
-  )
-
-  // Build adjacency for efficient per-node top-K selection
-  const adjacency = new Map()
-  filtered.forEach((link, i) => {
-    if (!adjacency.has(link.source)) adjacency.set(link.source, [])
-    if (!adjacency.has(link.target)) adjacency.set(link.target, [])
-    adjacency.get(link.source).push(i)
-    adjacency.get(link.target).push(i)
-  })
-
-  const visibleIndices = new Set()
-  for (const id of validIds) {
-    const neighbors = adjacency.get(id) || []
-    neighbors
-      .sort((a, b) => filtered[a].value - filtered[b].value)
-      .slice(0, MAX_LINKS_PER_NODE)
-      .forEach((i) => visibleIndices.add(i))
-  }
-
-  const links = [...visibleIndices].map((i) => ({
-    ...filtered[i],
-    value: filtered[i].value - 0.2,
-  }))
-
-  const nodes = waifusData
-    .filter((w) => validIds.has(w.id))
-    .map((w) => ({
-      id: w.id,
-      name: w.name,
-      img: getImage(w.display_picture),
-      rank: w.like_rank,
-      likes: w.likes,
-      trash: w.trash,
-      url: w.url,
-      display_picture: w.display_picture,
-      series: w.appearances?.[0]?.name ?? 'Unknown',
-    }))
-
-  return { nodes, links }
+  return imgCache.get(src)
 }
 
 export default function App() {
-  const fgRef = useRef()
-  const [allLinks, setAllLinks] = useState(null)
-  const [loadProgress, setLoadProgress] = useState(0)
-  const [hoveredNode, setHoveredNode] = useState(null)
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [maxRank, setMaxRank] = useState(300)
-  const [search, setSearch] = useState('')
-  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
+  const canvasRef = useRef()
+  const zoomRef = useRef()
+  const transformRef = useRef(d3.zoomIdentity)
+  const nodesRef = useRef([])
+  const drawRef = useRef(null)
+  const sizeRef = useRef({ w: window.innerWidth, h: window.innerHeight })
 
-  const deferredMaxRank = useDeferredValue(maxRank)
+  const [ready, setReady] = useState(false)
+  const [layoutError, setLayoutError] = useState(false)
+  const [hovered, setHovered] = useState(null)
+  const [selected, setSelected] = useState(null)
+  const [search, setSearch] = useState('')
+  const [activeSeries, setActiveSeries] = useState(null)
+  const [size, setSize] = useState(sizeRef.current)
+  const [cursor, setCursor] = useState({ x: 0, y: 0 })
+  const [hoverSource, setHoverSource] = useState(null)
 
   useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight })
+    const onResize = () => {
+      const s = { w: window.innerWidth, h: window.innerHeight }
+      sizeRef.current = s
+      setSize(s)
+    }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Load the large links file once
-  useEffect(() => {
-    async function load() {
-      const res = await fetch(`${import.meta.env.BASE_URL}waifu_links.json`)
-      const contentLength = +res.headers.get('Content-Length')
-      const reader = res.body.getReader()
-      const chunks = []
-      let received = 0
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value)
-        received += value.length
-        if (contentLength) setLoadProgress(Math.round((received / contentLength) * 100))
-      }
-
-      const buf = new Uint8Array(received)
-      let pos = 0
-      for (const c of chunks) { buf.set(c, pos); pos += c.length }
-      setAllLinks(JSON.parse(new TextDecoder().decode(buf)))
-    }
-    load()
+  // Series color mapping
+  const { colorMap, legendItems } = useMemo(() => {
+    const counts = new Map()
+    waifusData.forEach(w => {
+      const s = w.appearances?.[0]?.name ?? 'Unknown'
+      counts.set(s, (counts.get(s) || 0) + 1)
+    })
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const colorMap = new Map()
+    sorted.slice(0, TOP_SERIES).forEach(([s], i) => colorMap.set(s, PALETTE[i]))
+    const legendItems = sorted.slice(0, TOP_SERIES).map(([name, count]) => ({
+      name, count, color: colorMap.get(name),
+    }))
+    return { colorMap, legendItems }
   }, [])
 
-  const graphData = useMemo(() => {
-    if (!allLinks) return null
-    return buildGraph(allLinks, deferredMaxRank)
-  }, [allLinks, deferredMaxRank])
+  const neighborsRef = useRef({})
+  const similarRef = useRef({})
+  const antiRef = useRef({})
+  const nodeByIdRef = useRef({})
 
-  // Apply d3 forces after graph data changes
+  // Load layout + build nodes
   useEffect(() => {
-    if (!fgRef.current || !graphData) return
-    fgRef.current.d3Force('collide', d3.forceCollide().radius(NODE_R + 6))
-    fgRef.current.d3Force('link')?.distance((l) => 3500 * Math.abs(l.value))
-  }, [graphData])
+    Promise.all([
+      fetch(`${import.meta.env.BASE_URL}waifu_layout.json`).then(r => { if (!r.ok) throw new Error('missing'); return r.json() }),
+      fetch(`${import.meta.env.BASE_URL}waifu_neighbors.json`).then(r => r.ok ? r.json() : {}),
+      fetch(`${import.meta.env.BASE_URL}waifu_similar.json`).then(r => r.ok ? r.json() : {}),
+      fetch(`${import.meta.env.BASE_URL}waifu_antiwaifus.json`).then(r => r.ok ? r.json() : {}),
+    ]).then(([layout, neighbors, similar, anti]) => {
+      neighborsRef.current = neighbors
+      similarRef.current = similar
+      antiRef.current = anti
+      const nodes = waifusData.flatMap(w => {
+        const pos = layout[String(w.id)]
+        if (!pos) return []
+        const series = w.appearances?.[0]?.name ?? 'Unknown'
+        const img = loadImg(w.display_picture)
+        const node = {
+          id: w.id,
+          name: w.name,
+          wx: pos[0], wy: pos[1],
+          r: Math.max(14, Math.min(35, Math.sqrt(w.likes || 1) * 0.85)),
+          likes: w.likes || 0,
+          trash: w.trash || 0,
+          like_rank: w.like_rank,
+          url: w.url,
+          display_picture: w.display_picture,
+          series,
+          color: colorMap.get(series) ?? '#4a4a6a',
+          img,
+        }
+        if (!img.complete) img.onload = () => drawRef.current?.()
+        return [node]
+      })
+      nodesRef.current = nodes
+      nodeByIdRef.current = Object.fromEntries(nodes.map(n => [String(n.id), n]))
+      setReady(true)
+    }).catch(() => setLayoutError(true))
+  }, [colorMap])
 
-  // Zoom to fit on first load
+  // Resize canvas with DPR
   useEffect(() => {
-    if (!graphData || !fgRef.current) return
-    const t = setTimeout(() => fgRef.current?.zoomToFit(800, 80), 1200)
-    return () => clearTimeout(t)
-  }, [graphData])
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = size.w * dpr
+    canvas.height = size.h * dpr
+    canvas.style.width = `${size.w}px`
+    canvas.style.height = `${size.h}px`
+    drawRef.current?.()
+  }, [size])
 
-  const searchTerm = search.toLowerCase().trim()
-  const highlightedIds = useMemo(() => {
-    if (!searchTerm || !graphData) return new Set()
-    return new Set(
-      graphData.nodes
-        .filter(
-          (n) =>
-            n.name.toLowerCase().includes(searchTerm) ||
-            n.series.toLowerCase().includes(searchTerm)
-        )
-        .map((n) => n.id)
-    )
-  }, [searchTerm, graphData])
+  // Fit all nodes into view
+  const fitView = useCallback((animated = true) => {
+    const canvas = canvasRef.current
+    const zoom = zoomRef.current
+    const nodes = nodesRef.current
+    const { w, h } = sizeRef.current
+    if (!canvas || !zoom || !nodes.length) return
+    const xs = nodes.map(n => n.wx)
+    const ys = nodes.map(n => n.wy)
+    const x0 = Math.min(...xs), x1 = Math.max(...xs)
+    const y0 = Math.min(...ys), y1 = Math.max(...ys)
+    const pad = 80
+    const k = Math.min((w - pad * 2) / (x1 - x0), (h - pad * 2) / (y1 - y0))
+    const tx = w / 2 - k * (x0 + x1) / 2
+    const ty = h / 2 - k * (y0 + y1) / 2
+    const t = d3.zoomIdentity.translate(tx, ty).scale(k)
+    const sel = d3.select(canvas)
+    if (animated) sel.transition().duration(700).call(zoom.transform, t)
+    else sel.call(zoom.transform, t)
+  }, [])
 
-  const nodeCanvasObject = useCallback(
-    (node, ctx) => {
-      const { x, y } = node
-      const isHovered = hoveredNode?.id === node.id
-      const isSelected = selectedNode?.id === node.id
-      const isHighlighted = isHovered || isSelected || highlightedIds.has(node.id)
-      const dimmed = searchTerm.length > 0 && !isHighlighted
+  // Set up D3 zoom once when ready
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !ready) return
+    const zoom = d3.zoom()
+      .scaleExtent([0.03, 20])
+      .on('zoom', e => {
+        transformRef.current = e.transform
+        drawRef.current?.()
+      })
+    zoomRef.current = zoom
+    d3.select(canvas).call(zoom)
+    fitView(false)
+  }, [ready, fitView])
+
+  // Draw — defined as a plain function so it always closes over latest state.
+  // Stored in drawRef so the zoom handler always calls the freshest version.
+  function draw() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const dpr = window.devicePixelRatio || 1
+    const t = transformRef.current
+    const nodes = nodesRef.current
+    const term = search.toLowerCase().trim()
+    const hasFilter = term.length > 0 || !!activeSeries
+
+    // Background
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = '#0d0d1a'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // World transform: 1 world unit = t.k CSS pixels
+    ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y)
+
+    const showPortrait = t.k > 0.35   // portraits when nodes ≥ ~5px radius
+    const showLabel = t.k > 1.4        // labels when nodes ≥ ~20px radius
+
+    // ---- Link overlay for hovered / selected node ----
+    const activeNode = selected ?? hovered
+    if (activeNode) {
+      const nbrs = neighborsRef.current[String(activeNode.id)] || []
+      const nodeById = nodeByIdRef.current
+      for (const [nid, strength] of nbrs) {
+        const target = nodeById[nid]
+        if (!target) continue
+        ctx.beginPath()
+        ctx.moveTo(activeNode.wx, activeNode.wy)
+        ctx.lineTo(target.wx, target.wy)
+        ctx.strokeStyle = `rgba(255,105,180,${0.15 + strength * 0.65})`
+        ctx.lineWidth = (0.8 + strength * 2) / t.k
+        ctx.stroke()
+        // Dot at target end
+        ctx.beginPath()
+        ctx.arc(target.wx, target.wy, (2 + strength * 3) / t.k, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(255,105,180,${0.3 + strength * 0.5})`
+        ctx.fill()
+      }
+    }
+
+    for (const node of nodes) {
+      const { wx: x, wy: y, r, img } = node
+      const isHov = hovered?.id === node.id
+      const isSel = selected?.id === node.id
+      const nameHit = term && (
+        node.name.toLowerCase().includes(term) ||
+        node.series.toLowerCase().includes(term)
+      )
+      const seriesHit = !activeSeries || node.series === activeSeries
+      const lit = isHov || isSel || nameHit
+      const dim = hasFilter && !lit && !seriesHit
 
       ctx.save()
-      ctx.globalAlpha = dimmed ? 0.15 : 1
+      ctx.globalAlpha = dim ? 0.07 : 1
 
-      // Glow
-      if (isSelected) {
-        ctx.shadowBlur = 24
+      // Glow for hovered/selected
+      if (isSel || isHov) {
         ctx.shadowColor = '#ff69b4'
-      } else if (isHovered) {
-        ctx.shadowBlur = 16
-        ctx.shadowColor = '#ffb3d9'
-      } else if (highlightedIds.has(node.id)) {
-        ctx.shadowBlur = 10
-        ctx.shadowColor = '#ff9dce'
+        ctx.shadowBlur = 10 * dpr
       }
 
-      // Circular clip for image
       ctx.beginPath()
-      ctx.arc(x, y, NODE_R, 0, Math.PI * 2)
-      ctx.clip()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
 
-      if (node.img.complete && node.img.naturalWidth > 0) {
-        ctx.drawImage(node.img, x - NODE_R, y - NODE_R, NODE_R * 2, NODE_R * 2)
+      if (showPortrait && img.complete && img.naturalWidth) {
+        // Clip to circle, draw portrait
+        ctx.save()
+        ctx.clip()
+        ctx.shadowBlur = 0
+        ctx.drawImage(img, x - r, y - r, r * 2, r * 2)
+        ctx.restore()
       } else {
-        ctx.fillStyle = '#2a1a2e'
+        // Solid dot at low zoom
+        ctx.fillStyle = node.color
         ctx.fill()
       }
 
-      ctx.restore()
-      ctx.save()
-      ctx.globalAlpha = dimmed ? 0.15 : 1
-
-      // Border ring
+      // Ring
       ctx.beginPath()
-      ctx.arc(x, y, NODE_R, 0, Math.PI * 2)
-      ctx.strokeStyle = isSelected
-        ? '#ff69b4'
-        : isHovered
-        ? '#ffb3d9'
-        : highlightedIds.has(node.id)
-        ? '#ff9dce'
-        : 'rgba(255,105,180,0.3)'
-      ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.strokeStyle = isSel || lit ? '#ff69b4' : node.color
+      ctx.lineWidth = (isSel ? 3.5 : lit ? 2.5 : 1.5) / t.k
       ctx.stroke()
 
-      // Label below node on hover / selected
-      if (isHovered || isSelected) {
-        const label = node.name
-        const fs = 10
+      // Label
+      if (isHov || isSel || (showLabel && !dim)) {
+        const fs = 11 / t.k
         ctx.font = `bold ${fs}px sans-serif`
-        const tw = ctx.measureText(label).width
-        const bx = x - tw / 2 - 5
-        const by = y + NODE_R + 4
-
-        ctx.fillStyle = 'rgba(13,13,26,0.88)'
-        ctx.fillRect(bx, by, tw + 10, fs + 8)
-
-        ctx.fillStyle = '#ffb3d9'
         ctx.textAlign = 'center'
+        ctx.shadowBlur = 0
+        const tw = ctx.measureText(node.name).width
+        const pad = 3 / t.k
+        const lx = x - tw / 2 - pad
+        const ly = y + r + 2 / t.k
+        ctx.fillStyle = 'rgba(13,13,26,0.85)'
+        ctx.fillRect(lx, ly, tw + pad * 2, fs + pad * 2)
+        ctx.fillStyle = isHov || isSel ? '#ff69b4' : '#e0c8e0'
         ctx.textBaseline = 'top'
-        ctx.fillText(label, x, by + 4)
+        ctx.fillText(node.name, x, ly + pad)
       }
 
       ctx.restore()
-    },
-    [hoveredNode, selectedNode, highlightedIds, searchTerm]
-  )
+    }
 
-  const nodePointerAreaPaint = useCallback((node, color, ctx) => {
-    ctx.fillStyle = color
-    ctx.beginPath()
-    ctx.arc(node.x, node.y, NODE_R, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+  }
+  drawRef.current = draw
+
+  // Redraw when React state changes
+  useEffect(() => { drawRef.current?.() }, [hovered, selected, search, activeSeries, size, ready])
+
+  // Hover detection
+  const handleMouseMove = useCallback(e => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const t = transformRef.current
+    const wx = (e.clientX - rect.left - t.x) / t.k
+    const wy = (e.clientY - rect.top - t.y) / t.k
+    setCursor({ x: e.clientX, y: e.clientY })
+    let found = null, minD = Infinity
+    for (const n of nodesRef.current) {
+      const d = Math.hypot(n.wx - wx, n.wy - wy)
+      if (d <= n.r && d < minD) { minD = d; found = n }
+    }
+    if (found) setHoverSource('canvas')
+    setHovered(prev => prev?.id === found?.id ? prev : found)
   }, [])
 
-  const linkColor = useCallback((link) => {
-    const s = Math.max(0, Math.min(1, 1 - link.value))
-    return `rgba(255,105,180,${0.08 + s * 0.45})`
+  const handleClick = useCallback(() => {
+    setSelected(prev => hovered
+      ? prev?.id === hovered.id ? null : hovered
+      : prev
+    )
+  }, [hovered])
+
+  const handleSidebarHover = useCallback((node, e) => {
+    setHoverSource('sidebar')
+    setHovered(node)
+    setCursor({ x: e.clientX, y: e.clientY })
   }, [])
 
-  const linkWidth = useCallback((link) => 0.5 + (1 - link.value) * 1.5, [])
+  const trashRate = selected
+    ? Math.round(100 * selected.trash / Math.max(1, selected.likes + selected.trash))
+    : 0
 
-  const handleNodeClick = useCallback(
-    (node) =>
-      setSelectedNode((prev) => (prev?.id === node.id ? null : node)),
-    []
-  )
+  const similarNodes = selected
+    ? (similarRef.current[String(selected.id)] || [])
+        .map(([nid]) => nodeByIdRef.current[nid]).filter(Boolean)
+    : []
 
-  if (!allLinks) {
+  const antiNodes = selected
+    ? (antiRef.current[String(selected.id)] || [])
+        .map(([nid]) => nodeByIdRef.current[nid]).filter(Boolean)
+    : []
+
+  if (layoutError) {
     return (
       <div className="loading">
         <div className="loading-content">
-          <div className="spinner" />
-          <p>Loading waifu connections…</p>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${loadProgress}%` }} />
-          </div>
-          <span className="progress-label">{loadProgress}%</span>
+          <p style={{ color: '#ff6b9d', fontWeight: 700 }}>Layout not found.</p>
+          <p>Run: <code style={{ background: 'rgba(255,105,180,0.1)', padding: '2px 6px', borderRadius: 4 }}>python data/compute_tsne.py</code></p>
         </div>
       </div>
     )
@@ -268,103 +335,161 @@ export default function App() {
           <span>Waifu Clusters</span>
         </div>
         <div className="controls">
-          <label className="rank-control">
-            <span>Top {maxRank}</span>
-            <input
-              type="range"
-              min={50}
-              max={1000}
-              step={50}
-              value={maxRank}
-              onChange={(e) => setMaxRank(+e.target.value)}
-            />
-          </label>
           <input
             className="search-input"
             type="search"
             placeholder="Search waifu or series…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
           />
-          <button
-            className="btn-reset"
-            onClick={() => fgRef.current?.zoomToFit(600, 80)}
-          >
-            Fit
-          </button>
+          <button className="btn-reset" onClick={() => fitView(true)}>Fit</button>
         </div>
+        <span className="status-count">{nodesRef.current.length} waifus · scroll to zoom</span>
       </div>
 
-      <div className="status-bar">
-        <span>{graphData?.nodes.length ?? 0} waifus</span>
-        <span>{graphData?.links.length ?? 0} connections</span>
-        {maxRank !== deferredMaxRank && <span className="computing">computing…</span>}
-      </div>
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'block', cursor: hovered ? 'pointer' : 'grab' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => { setHovered(null); setHoverSource(null); }}
+        onClick={handleClick}
+      />
 
-      {graphData && (
-        <ForceGraph2D
-          ref={fgRef}
-          width={size.w}
-          height={size.h}
-          graphData={graphData}
-          nodeRelSize={NODE_R}
-          d3AlphaDecay={0}
-          cooldownTime={Infinity}
-          backgroundColor="#0d0d1a"
-          nodeCanvasObject={nodeCanvasObject}
-          nodePointerAreaPaint={nodePointerAreaPaint}
-          linkColor={linkColor}
-          linkWidth={linkWidth}
-          onNodeHover={setHoveredNode}
-          onNodeClick={handleNodeClick}
-        />
+      {/* Canvas Tooltip (Floating) */}
+      {hovered && hoverSource === 'canvas' && (
+        <div className="canvas-tooltip" style={{ left: cursor.x + 16, top: cursor.y - 12 }}>
+          <div className="tooltip-name">{hovered.name}</div>
+          <div className="tooltip-series">{hovered.series}</div>
+        </div>
       )}
 
-      {selectedNode && (
-        <aside className="panel">
+      {/* Sidebar Preview Card (Fixed on Left) */}
+      {hovered && hoverSource === 'sidebar' && (
+        <div className="preview-card">
+          <img className="preview-card-img" src={hovered.display_picture} alt="" />
+          <div className="preview-card-body">
+            <div className="preview-card-name">{hovered.name}</div>
+            <div className="preview-card-series">{hovered.series}</div>
+            <div className="preview-card-stats">
+              <span className="pink">♥ {hovered.likes.toLocaleString()}</span>
+              <span className="muted">🗑 {hovered.trash.toLocaleString()}</span>
+              <span className="muted">#{hovered.like_rank}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Series legend */}
+      <div className="legend">
+        <div className="legend-title">Top Series</div>
+        {legendItems.map(({ name, count, color }) => (
           <button
-            className="panel-close"
-            onClick={() => setSelectedNode(null)}
-            aria-label="Close"
+            key={name}
+            className={`legend-item${activeSeries === name ? ' active' : ''}`}
+            onClick={() => setActiveSeries(s => s === name ? null : name)}
           >
-            ✕
+            <span className="legend-dot" style={{ background: color }} />
+            <span className="legend-name">{name}</span>
+            <span className="legend-count">{count}</span>
           </button>
-          <img
-            className="panel-avatar"
-            src={selectedNode.display_picture}
-            alt={selectedNode.name}
-          />
-          <h2 className="panel-name">{selectedNode.name}</h2>
-          <p className="panel-series">{selectedNode.series}</p>
+        ))}
+        {activeSeries && (
+          <button className="legend-clear" onClick={() => setActiveSeries(null)}>
+            clear filter
+          </button>
+        )}
+      </div>
+
+      {/* Detail panel */}
+      {selected && (
+        <aside className="panel">
+          <button className="panel-close" onClick={() => setSelected(null)}>✕</button>
+          <img className="panel-avatar" src={selected.display_picture} alt={selected.name} />
+          <h2 className="panel-name">{selected.name}</h2>
+          <p className="panel-series">{selected.series}</p>
           <div className="panel-stats">
             <div className="stat">
               <span className="stat-label">Rank</span>
-              <span className="stat-value">#{selectedNode.rank}</span>
+              <span className="stat-value">#{selected.like_rank}</span>
             </div>
             <div className="stat">
               <span className="stat-label">Likes</span>
-              <span className="stat-value pink">
-                {selectedNode.likes?.toLocaleString()}
-              </span>
+              <span className="stat-value pink">♥ {selected.likes.toLocaleString()}</span>
             </div>
             <div className="stat">
               <span className="stat-label">Trash</span>
-              <span className="stat-value muted">
-                {selectedNode.trash?.toLocaleString()}
-              </span>
+              <span className="stat-value muted">{selected.trash.toLocaleString()}</span>
             </div>
           </div>
-          {selectedNode.url && (
-            <a
-              className="panel-link"
-              href={selectedNode.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+          <div className="controversy">
+            <div className="controversy-row">
+              <span>Controversy</span>
+              <span>{trashRate}%</span>
+            </div>
+            <div className="controversy-track">
+              <div className="controversy-fill" style={{ width: `${trashRate}%` }} />
+            </div>
+          </div>
+          {similarNodes.length > 0 && (
+            <div className="waifu-section">
+              <div className="waifu-section-label">Similar</div>
+              <div className="waifu-list">
+                {similarNodes.map(n => (
+                  <button 
+                    key={n.id} 
+                    className="waifu-row-item" 
+                    onClick={() => setSelected(n)}
+                    onMouseEnter={(e) => handleSidebarHover(n, e)}
+                    onMouseMove={(e) => handleSidebarHover(n, e)}
+                    onMouseLeave={() => { setHovered(null); setHoverSource(null); }}
+                  >
+                    <img src={n.display_picture} alt={n.name} />
+                    <div className="waifu-row-info">
+                      <span className="waifu-row-name">{n.name}</span>
+                      {n.series === selected.series && (
+                        <span className="waifu-chip">Same Show</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {antiNodes.length > 0 && (
+            <div className="waifu-section">
+              <div className="waifu-section-label anti">Anti</div>
+              <div className="waifu-list">
+                {antiNodes.map(n => (
+                  <button 
+                    key={n.id} 
+                    className="waifu-row-item anti" 
+                    onClick={() => setSelected(n)}
+                    onMouseEnter={(e) => handleSidebarHover(n, e)}
+                    onMouseMove={(e) => handleSidebarHover(n, e)}
+                    onMouseLeave={() => { setHovered(null); setHoverSource(null); }}
+                  >
+                    <img src={n.display_picture} alt={n.name} />
+                    <span className="waifu-row-name">{n.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {selected.url && (
+            <a className="panel-link" href={selected.url} target="_blank" rel="noopener noreferrer">
               View on MyWaifuList ↗
             </a>
           )}
         </aside>
+      )}
+
+      {!ready && (
+        <div className="loading">
+          <div className="loading-content">
+            <div className="spinner" />
+            <p>Loading waifu universe…</p>
+          </div>
+        </div>
       )}
     </div>
   )

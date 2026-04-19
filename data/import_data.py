@@ -24,6 +24,10 @@ if __name__ == "__main__":
             "name": w["name"],
             "display_picture": w["display_picture"],
             "like_rank": w["like_rank"],
+            "likes": w.get("likes"),
+            "trash": w.get("trash"),
+            "url": w.get("url"),
+            "appearances": [{"name": a["name"]} for a in w.get("appearances") or []],
         }
         for w in waifus.values()
         if w and w["id"] in valid_waifus_ids
