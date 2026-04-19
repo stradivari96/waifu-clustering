@@ -232,6 +232,14 @@ export default function App() {
       drawEdges(antiRef.current[String(activeNode.id)], 244, 63, 94)         // red
     }
 
+    // Build related-node set for selected node (neighbors + anti-waifus)
+    let relatedIds = null
+    if (selected) {
+      relatedIds = new Set([String(selected.id)])
+      for (const [nid] of (neighborsRef.current[String(selected.id)] || [])) relatedIds.add(nid)
+      for (const [nid] of (antiRef.current[String(selected.id)] || [])) relatedIds.add(nid)
+    }
+
     for (const node of nodes) {
       const { wx: x, wy: y, r, img } = node
       const isHov = hovered?.id === node.id
@@ -242,7 +250,9 @@ export default function App() {
       )
       const seriesHit = !activeSeries || node.series === activeSeries
       const lit = isHov || isSel || nameHit
-      const dim = hasFilter && !lit && !seriesHit
+      const filterDim = hasFilter && !lit && !seriesHit
+      const selectionDim = relatedIds != null && !relatedIds.has(String(node.id)) && !isHov
+      const dim = filterDim || selectionDim
 
       ctx.save()
       ctx.globalAlpha = dim ? 0.07 : 1
@@ -277,7 +287,7 @@ export default function App() {
       ctx.stroke()
 
       // Label
-      if (isHov || isSel || (showLabel && !dim)) {
+      if (isHov || isSel || (relatedIds?.has(String(node.id)))) {
         const fs = 11 / t.k
         ctx.font = `bold ${fs}px sans-serif`
         ctx.textAlign = 'center'
@@ -324,7 +334,7 @@ export default function App() {
   const handleClick = useCallback(() => {
     setSelected(prev => hovered
       ? prev?.id === hovered.id ? null : hovered
-      : prev
+      : null
     )
   }, [hovered])
 
