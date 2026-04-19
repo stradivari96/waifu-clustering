@@ -86,6 +86,10 @@ body {
   flex: 1;
 }
 
+.search-wrapper {
+  position: relative;
+}
+
 .search-input {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 105, 180, 0.2);
@@ -99,6 +103,60 @@ body {
 }
 .search-input::placeholder { color: rgba(224, 200, 224, 0.3); }
 .search-input:focus { border-color: rgba(255, 105, 180, 0.5); }
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: rgba(13, 13, 26, 0.97);
+  border: 1px solid rgba(255, 105, 180, 0.25);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+
+.suggestion-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.suggestion-item:hover { background: rgba(255, 105, 180, 0.12); }
+
+.suggestion-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.04);
+}
+
+.suggestion-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.suggestion-name {
+  font-size: 12px;
+  color: #e0c8e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-series {
+  font-size: 10px;
+  color: rgba(224, 200, 224, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .btn-reset {
   background: rgba(255, 105, 180, 0.1);

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
+import Fuse from 'fuse.js'
 import waifusData from './waifus.json'
 
 const TOP_SERIES = 12
@@ -118,6 +119,35 @@ export default function App() {
     canvas.style.height = `${size.h}px`
     drawRef.current?.()
   }, [size])
+
+  const fuseRef = useRef(null)
+  useEffect(() => {
+    if (!ready) return
+    fuseRef.current = new Fuse(nodesRef.current, {
+      keys: ['name', 'series'],
+      threshold: 0.4,
+      includeScore: true,
+    })
+  }, [ready])
+
+  const suggestions = useMemo(() => {
+    const term = search.trim()
+    if (!term || !fuseRef.current) return []
+    return fuseRef.current.search(term, { limit: 8 }).map(r => r.item)
+  }, [search, ready])
+
+  const selectSuggestion = useCallback((node) => {
+    setSelected(node)
+    setSearch('')
+    const canvas = canvasRef.current
+    const zoom = zoomRef.current
+    const { w, h } = sizeRef.current
+    if (!canvas || !zoom) return
+    const k = Math.max(transformRef.current.k, 3)
+    const tx = w / 2 - k * node.wx
+    const ty = h / 2 - k * node.wy
+    d3.select(canvas).transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(k))
+  }, [])
 
   // Fit all nodes into view
   const fitView = useCallback((animated = true) => {
@@ -337,13 +367,28 @@ export default function App() {
           <span>Waifu Clusters</span>
         </div>
         <div className="controls">
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Search waifu or series…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+          <div className="search-wrapper">
+            <input
+              className="search-input"
+              type="search"
+              placeholder="Search waifu or series…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {suggestions.length > 0 && (
+              <div className="suggestions">
+                {suggestions.map(node => (
+                  <div key={node.id} className="suggestion-item" onMouseDown={() => selectSuggestion(node)}>
+                    <img className="suggestion-img" src={node.display_picture} alt="" />
+                    <div className="suggestion-text">
+                      <span className="suggestion-name">{node.name}</span>
+                      <span className="suggestion-series">{node.series}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="btn-reset" onClick={() => fitView(true)}>Fit</button>
         </div>
         <span className="status-count">{nodesRef.current.length} waifus · scroll to zoom</span>
