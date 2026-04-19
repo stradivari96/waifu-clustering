@@ -181,23 +181,25 @@ export default function App() {
     // ---- Link overlay for hovered / selected node ----
     const activeNode = selected ?? hovered
     if (activeNode) {
-      const nbrs = neighborsRef.current[String(activeNode.id)] || []
       const nodeById = nodeByIdRef.current
-      for (const [nid, strength] of nbrs) {
-        const target = nodeById[nid]
-        if (!target) continue
-        ctx.beginPath()
-        ctx.moveTo(activeNode.wx, activeNode.wy)
-        ctx.lineTo(target.wx, target.wy)
-        ctx.strokeStyle = `rgba(255,105,180,${0.15 + strength * 0.65})`
-        ctx.lineWidth = (0.8 + strength * 2) / t.k
-        ctx.stroke()
-        // Dot at target end
-        ctx.beginPath()
-        ctx.arc(target.wx, target.wy, (2 + strength * 3) / t.k, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(255,105,180,${0.3 + strength * 0.5})`
-        ctx.fill()
+      const drawEdges = (pairs, r, g, b) => {
+        for (const [nid, strength] of (pairs || [])) {
+          const target = nodeById[nid]
+          if (!target) continue
+          ctx.beginPath()
+          ctx.moveTo(activeNode.wx, activeNode.wy)
+          ctx.lineTo(target.wx, target.wy)
+          ctx.strokeStyle = `rgba(${r},${g},${b},${0.15 + strength * 0.65})`
+          ctx.lineWidth = (0.8 + strength * 2) / t.k
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(target.wx, target.wy, (2 + strength * 3) / t.k, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(${r},${g},${b},${0.3 + strength * 0.5})`
+          ctx.fill()
+        }
       }
+      drawEdges(neighborsRef.current[String(activeNode.id)], 78, 205, 196)    // teal
+      drawEdges(antiRef.current[String(activeNode.id)], 244, 63, 94)         // red
     }
 
     for (const node of nodes) {

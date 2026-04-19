@@ -8,7 +8,7 @@ from collections import defaultdict
 ROOT = Path(__file__).resolve().parents[1]
 
 print("Loading waifus...")
-with open(ROOT / "src" / "waifus.json") as f:
+with open(ROOT / "src" / "waifus.json", encoding="utf-8") as f:
     waifus = json.load(f)
 
 waifu_ids = [w["id"] for w in waifus]
@@ -23,7 +23,7 @@ radii = np.array([
 ], dtype=np.float32)
 
 print("Loading users and computing similarity metrics...")
-with open(ROOT / "data" / "users.json") as f:
+with open(ROOT / "data" / "users.json", encoding="utf-8") as f:
     users = json.load(f)
 
 total_users = len(users)
