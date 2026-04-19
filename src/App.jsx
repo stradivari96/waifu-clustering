@@ -271,7 +271,11 @@ export default function App() {
         ctx.save()
         ctx.clip()
         ctx.shadowBlur = 0
-        ctx.drawImage(img, x - r, y - r, r * 2, r * 2)
+        const size = r * 2
+        const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight)
+        const sw = img.naturalWidth * scale
+        const sh = img.naturalHeight * scale
+        ctx.drawImage(img, x - sw / 2, y - r, sw, sh)
         ctx.restore()
       } else {
         // Solid dot at low zoom

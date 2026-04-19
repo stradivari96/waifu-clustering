@@ -32,8 +32,11 @@ valid_ids = set(waifu_ids)
 liked_by = defaultdict(set)
 trashed_by = defaultdict(set)
 
+MIN_USER_LIKES = 5
 for uid, user in users.items():
     liked = [wid for wid in user.get("liked", []) if wid in valid_ids]
+    if len(liked) < MIN_USER_LIKES:
+        continue
     trashed = [wid for wid in user.get("trashed", []) if wid in valid_ids]
     for wid in liked: liked_by[wid].add(uid)
     for wid in trashed: trashed_by[wid].add(uid)
@@ -45,10 +48,12 @@ np.fill_diagonal(dist_matrix, 0.0)
 for i in range(n):
     for j in range(i + 1, n):
         id_i, id_j = waifu_ids[i], waifu_ids[j]
-        set_i, set_j = liked_by[id_i], liked_by[id_j]
+        set_i = liked_by[id_i] - trashed_by[id_i]
+        set_j = liked_by[id_j] - trashed_by[id_j]
         if not set_i or not set_j: continue
         intersection = len(set_i & set_j)
-        if intersection == 0: continue
+        if intersection < 3: continue
+        if intersection < 0.005 * min(len(set_i), len(set_j)): continue
         union = len(set_i) + len(set_j) - intersection
         jaccard = intersection / union
         
@@ -87,18 +92,22 @@ canvas_neighbors = {}
 for i in range(n):
     id_i = waifu_ids[i]
     if id_i not in liked_by: continue
-    likers_i = liked_by[id_i]
+    likers_i = liked_by[id_i] - trashed_by[id_i]
+    if not likers_i: continue
     show_i = waifu_show.get(str(id_i))
-    
+
     scores = []
     for j in range(n):
         if i == j: continue
         id_j = waifu_ids[j]
         if id_j not in liked_by: continue
-        
-        intersection = len(likers_i & liked_by[id_j])
-        if intersection < 2: continue
-        jaccard = intersection / (len(likers_i) + len(liked_by[id_j]) - intersection)
+
+        likers_j = liked_by[id_j] - trashed_by[id_j]
+        if not likers_j: continue
+        intersection = len(likers_i & likers_j)
+        if intersection < 3: continue
+        if intersection < 0.005 * min(len(likers_i), len(likers_j)): continue
+        jaccard = intersection / (len(likers_i) + len(likers_j) - intersection)
         
         if jaccard > 0.001:
             scores.append((id_j, jaccard))
@@ -134,7 +143,7 @@ for id_i in waifu_ids:
         intersection_count = len(likers_i & trashed_by[id_j])
         if intersection_count < 3: continue
         
-        # Penalized Lift: Intersection / (Count_A * Count_Trash_B^1.4)
+        # Penalized Lift: Intersection / (Count_A * Count_Trash_B^1.35)
         # The exponent on Trash_B makes popular targets (Seryu) score much lower.
         t_j = trash_counts[id_j]
         score = intersection_count / (len_i * (t_j ** 1.35))
@@ -145,9 +154,9 @@ for id_i in waifu_ids:
         if is_same_show:
             score *= 5.0
         
-        # Still ensure they hate B more than they like B (relaxed for rivals)
+        # Ensure they hate B more than they like B
         like_overlap = len(likers_i & liked_by[id_j])
-        if intersection_count > like_overlap or (is_same_show and intersection_count > like_overlap * 0.3):
+        if intersection_count > like_overlap:
             anti_candidates.append((id_j, score))
             
     if anti_candidates:
