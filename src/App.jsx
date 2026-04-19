@@ -33,7 +33,6 @@ export default function App() {
   const [hovered, setHovered] = useState(null)
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
-  const [activeSeries, setActiveSeries] = useState(null)
   const [size, setSize] = useState(sizeRef.current)
   const [cursor, setCursor] = useState({ x: 0, y: 0 })
   const [hoverSource, setHoverSource] = useState(null)
@@ -50,7 +49,7 @@ export default function App() {
   }, [])
 
   // Series color mapping
-  const { colorMap, legendItems } = useMemo(() => {
+  const colorMap = useMemo(() => {
     const counts = new Map()
     waifusData.forEach(w => {
       const s = w.appearances?.[0]?.name ?? 'Unknown'
@@ -59,10 +58,7 @@ export default function App() {
     const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
     const colorMap = new Map()
     sorted.slice(0, TOP_SERIES).forEach(([s], i) => colorMap.set(s, PALETTE[i]))
-    const legendItems = sorted.slice(0, TOP_SERIES).map(([name, count]) => ({
-      name, count, color: colorMap.get(name),
-    }))
-    return { colorMap, legendItems }
+    return colorMap
   }, [])
 
   const neighborsRef = useRef({})
@@ -196,7 +192,7 @@ export default function App() {
     const t = transformRef.current
     const nodes = nodesRef.current
     const term = search.toLowerCase().trim()
-    const hasFilter = term.length > 0 || !!activeSeries
+    const hasFilter = term.length > 0
 
     // Background
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -249,9 +245,8 @@ export default function App() {
         node.name.toLowerCase().includes(term) ||
         node.series.toLowerCase().includes(term)
       )
-      const seriesHit = !activeSeries || node.series === activeSeries
       const lit = isHov || isSel || nameHit
-      const filterDim = hasFilter && !lit && !seriesHit
+      const filterDim = hasFilter && !lit
       const selectionDim = relatedIds != null && !relatedIds.has(String(node.id)) && !isHov
       const dim = filterDim || selectionDim
 
@@ -318,7 +313,7 @@ export default function App() {
   useEffect(() => { if (selected) setPanelCollapsed(false) }, [selected?.id])
 
   // Redraw when React state changes
-  useEffect(() => { drawRef.current?.() }, [hovered, selected, search, activeSeries, size, ready])
+  useEffect(() => { drawRef.current?.() }, [hovered, selected, search, size, ready])
 
   // Hover detection
   const handleMouseMove = useCallback(e => {
@@ -453,27 +448,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Series legend */}
-      <div className="legend">
-        <div className="legend-title">Top Series</div>
-        {legendItems.map(({ name, count, color }) => (
-          <button
-            key={name}
-            className={`legend-item${activeSeries === name ? ' active' : ''}`}
-            onClick={() => setActiveSeries(s => s === name ? null : name)}
-          >
-            <span className="legend-dot" style={{ background: color }} />
-            <span className="legend-name">{name}</span>
-            <span className="legend-count">{count}</span>
-          </button>
-        ))}
-        {activeSeries && (
-          <button className="legend-clear" onClick={() => setActiveSeries(null)}>
-            clear filter
-          </button>
-        )}
-      </div>
 
       {/* Detail panel */}
       {selected && (
