@@ -240,6 +240,7 @@ body {
   height: 240px;
   border-radius: 16px;
   object-fit: cover;
+  object-position: top;
   border: 1px solid rgba(255, 105, 180, 0.3);
   align-self: center;
 }
@@ -343,6 +344,7 @@ body {
   height: 140px;
   border-radius: 50%;
   object-fit: cover;
+  object-position: top;
   border: 3px solid rgba(255, 105, 180, 0.35);
 }
 
@@ -468,6 +470,7 @@ body {
   height: 42px;
   border-radius: 50%;
   object-fit: cover;
+  object-position: top;
   flex-shrink: 0;
   border: 2px solid rgba(255, 179, 217, 0.25);
   transition: transform 0.2s ease, border-radius 0.2s ease, box-shadow 0.2s ease;

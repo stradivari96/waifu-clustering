@@ -167,9 +167,9 @@ for id_i in waifu_ids:
 
 # ---- Save ----
 layout = {str(wid): [round(float(coords[i, 0]), 2), round(float(coords[i, 1]), 2)] for i, wid in enumerate(waifu_ids)}
-with open(ROOT / "public" / "waifu_layout.json", "w") as f: json.dump(layout, f)
-with open(ROOT / "public" / "waifu_neighbors.json", "w") as f: json.dump(canvas_neighbors, f)
-with open(ROOT / "public" / "waifu_similar.json", "w") as f: json.dump(neighbor_map, f)
-with open(ROOT / "public" / "waifu_antiwaifus.json", "w") as f: json.dump(anti_map, f)
+with open(ROOT / "public" / "waifu_layout.json", "w") as f: json.dump(layout, f, indent=2)
+with open(ROOT / "public" / "waifu_neighbors.json", "w") as f: json.dump(canvas_neighbors, f, indent=2)
+with open(ROOT / "public" / "waifu_similar.json", "w") as f: json.dump(neighbor_map, f, indent=2)
+with open(ROOT / "public" / "waifu_antiwaifus.json", "w") as f: json.dump(anti_map, f, indent=2)
 
 print("Done! Penalized same-show and suppressed global trash targets.")
