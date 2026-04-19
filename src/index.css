@@ -354,6 +354,8 @@ body {
 }
 .legend-clear:hover { background: rgba(255, 105, 180, 0.1); color: #ff69b4; }
 
+.panel-strip { display: none; }
+
 /* Detail panel */
 .panel {
   position: fixed;
@@ -655,4 +657,38 @@ body {
   }
   .waifu-list { max-height: 180px; }
   .preview-card { display: none; }
+  .panel-close { display: none; }
+
+  .panel-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: calc(100% - 36px); /* leave room for close button */
+    cursor: pointer;
+    padding-bottom: 14px;
+    color: #ffb3d9;
+    background: none;
+    border: none;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .panel-strip-chevron {
+    font-size: 9px;
+    color: rgba(255, 179, 217, 0.45);
+    flex-shrink: 0;
+  }
+  .panel-strip-name {
+    font-size: 15px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .panel--collapsed {
+    max-height: 54px;
+    overflow: hidden;
+    padding: 14px 18px;
+  }
+  .panel--collapsed::before { display: none; }
 }

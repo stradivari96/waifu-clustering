@@ -37,6 +37,7 @@ export default function App() {
   const [size, setSize] = useState(sizeRef.current)
   const [cursor, setCursor] = useState({ x: 0, y: 0 })
   const [hoverSource, setHoverSource] = useState(null)
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
 
   useEffect(() => {
     const onResize = () => {
@@ -314,6 +315,8 @@ export default function App() {
   }
   drawRef.current = draw
 
+  useEffect(() => { if (selected) setPanelCollapsed(false) }, [selected?.id])
+
   // Redraw when React state changes
   useEffect(() => { drawRef.current?.() }, [hovered, selected, search, activeSeries, size, ready])
 
@@ -474,8 +477,12 @@ export default function App() {
 
       {/* Detail panel */}
       {selected && (
-        <aside className="panel">
+        <aside className={`panel${panelCollapsed ? ' panel--collapsed' : ''}`}>
           <button className="panel-close" onClick={() => setSelected(null)}>✕</button>
+          <div className="panel-strip" onClick={() => setPanelCollapsed(c => !c)}>
+            <span className="panel-strip-chevron">{panelCollapsed ? '▲' : '▼'}</span>
+            <span className="panel-strip-name">{selected.name}</span>
+          </div>
           <img className="panel-avatar" src={selected.display_picture} alt={selected.name} />
           <h2 className="panel-name">{selected.name}</h2>
           <p className="panel-series">{selected.series}</p>
