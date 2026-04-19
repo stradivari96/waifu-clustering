@@ -124,6 +124,7 @@ for id_i in waifu_ids:
     if id_i not in liked_by: continue
     likers_i = liked_by[id_i]
     len_i = len(likers_i)
+    show_i = waifu_show.get(str(id_i))
     
     anti_candidates = []
     for id_j in waifu_ids:
@@ -137,10 +138,16 @@ for id_i in waifu_ids:
         # The exponent on Trash_B makes popular targets (Seryu) score much lower.
         t_j = trash_counts[id_j]
         score = intersection_count / (len_i * (t_j ** 1.35))
+
+        # Rival Ship Boost
+        show_j = waifu_show.get(str(id_j))
+        is_same_show = (show_i and show_i == show_j)
+        if is_same_show:
+            score *= 5.0
         
-        # Still ensure they hate B more than they like B
+        # Still ensure they hate B more than they like B (relaxed for rivals)
         like_overlap = len(likers_i & liked_by[id_j])
-        if intersection_count > like_overlap:
+        if intersection_count > like_overlap or (is_same_show and intersection_count > like_overlap * 0.3):
             anti_candidates.append((id_j, score))
             
     if anti_candidates:
