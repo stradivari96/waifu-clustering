@@ -62,7 +62,6 @@ export default function App() {
     return colorMap
   }, [])
 
-  const neighborsRef = useRef({})
   const similarRef = useRef({})
   const antiRef = useRef({})
   const nodeByIdRef = useRef({})
@@ -71,11 +70,9 @@ export default function App() {
   useEffect(() => {
     Promise.all([
       fetch(`${import.meta.env.BASE_URL}waifu_layout.json`).then(r => { if (!r.ok) throw new Error('missing'); return r.json() }),
-      fetch(`${import.meta.env.BASE_URL}waifu_neighbors.json`).then(r => r.ok ? r.json() : {}),
       fetch(`${import.meta.env.BASE_URL}waifu_similar.json`).then(r => r.ok ? r.json() : {}),
       fetch(`${import.meta.env.BASE_URL}waifu_antiwaifus.json`).then(r => r.ok ? r.json() : {}),
-    ]).then(([layout, neighbors, similar, anti]) => {
-      neighborsRef.current = neighbors
+    ]).then(([layout, similar, anti]) => {
       similarRef.current = similar
       antiRef.current = anti
       const nodes = waifusData.flatMap(w => {
@@ -226,7 +223,7 @@ export default function App() {
           ctx.fill()
         }
       }
-      drawEdges(neighborsRef.current[String(activeNode.id)], 78, 205, 196)    // teal
+      drawEdges(similarRef.current[String(activeNode.id)], 78, 205, 196)    // teal
       drawEdges(antiRef.current[String(activeNode.id)], 244, 63, 94)         // red
     }
 
@@ -234,7 +231,7 @@ export default function App() {
     let relatedIds = null
     if (selected) {
       relatedIds = new Set([String(selected.id)])
-      for (const [nid] of (neighborsRef.current[String(selected.id)] || [])) relatedIds.add(nid)
+      for (const [nid] of (similarRef.current[String(selected.id)] || [])) relatedIds.add(nid)
       for (const [nid] of (antiRef.current[String(selected.id)] || [])) relatedIds.add(nid)
     }
 

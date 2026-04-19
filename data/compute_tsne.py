@@ -85,16 +85,14 @@ for iteration in range(300):
             any_push = True
     if not any_push: break
 
-print("Generating maps with same-show penalty...")
-neighbor_map = {} 
-canvas_neighbors = {}
+print("Generating neighbor maps...")
+neighbor_map = {}
 
 for i in range(n):
     id_i = waifu_ids[i]
     if id_i not in liked_by: continue
     likers_i = liked_by[id_i] - trashed_by[id_i]
     if not likers_i: continue
-    show_i = waifu_show.get(str(id_i))
 
     scores = []
     for j in range(n):
@@ -108,21 +106,15 @@ for i in range(n):
         if intersection < 3: continue
         if intersection < 0.005 * min(len(likers_i), len(likers_j)): continue
         jaccard = intersection / (len(likers_i) + len(likers_j) - intersection)
-        
+
         if jaccard > 0.001:
             scores.append((id_j, jaccard))
-            
+
     if scores:
         scores.sort(key=lambda x: -x[1])
         top_10 = scores[:10]
         mx = top_10[0][1]
         neighbor_map[str(id_i)] = [[str(sid), round(s / mx, 3)] for sid, s in top_10]
-        
-        # For canvas links, we keep them stronger/less penalized so the lines make sense
-        strong = [s for s in scores if s[1] > 0.01][:10]
-        if strong:
-            mx_s = strong[0][1]
-            canvas_neighbors[str(id_i)] = [[str(sid), round(s / mx_s, 3)] for sid, s in strong]
 
 # ---- Anti Map (Popularity-Penalized Lift) ----
 # To kill Seryu/Asuna "everywhere", we penalize globally popular trash targets.
@@ -168,7 +160,6 @@ for id_i in waifu_ids:
 # ---- Save ----
 layout = {str(wid): [round(float(coords[i, 0]), 2), round(float(coords[i, 1]), 2)] for i, wid in enumerate(waifu_ids)}
 with open(ROOT / "public" / "waifu_layout.json", "w") as f: json.dump(layout, f, indent=2)
-with open(ROOT / "public" / "waifu_neighbors.json", "w") as f: json.dump(canvas_neighbors, f, indent=2)
 with open(ROOT / "public" / "waifu_similar.json", "w") as f: json.dump(neighbor_map, f, indent=2)
 with open(ROOT / "public" / "waifu_antiwaifus.json", "w") as f: json.dump(anti_map, f, indent=2)
 
