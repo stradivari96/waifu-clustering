@@ -601,3 +601,57 @@ body {
   color: #ffb3d9;
   text-decoration: underline;
 }
+
+@media (max-width: 600px) {
+  .status-count { display: none; }
+
+  .search-input { width: auto; flex: 1; min-width: 0; }
+
+  .topbar { gap: 8px; padding: 8px 12px; }
+
+  /* Legend: horizontal scrollable strip at bottom */
+  .legend {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0 2px;
+    padding: 6px 10px;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    align-items: center;
+  }
+  .legend-title { display: none; }
+  .legend-count { display: none; }
+  .legend-item { padding: 4px 8px; flex-shrink: 0; }
+  .legend-name { font-size: 11px; max-width: 90px; }
+  .legend-clear { flex-shrink: 0; }
+
+  /* Panel: bottom sheet */
+  .panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 72vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 20px 18px max(24px, env(safe-area-inset-bottom));
+    z-index: 30;
+  }
+  /* Pull-handle indicator */
+  .panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 105, 180, 0.25);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+  .waifu-list { max-height: 180px; }
+}

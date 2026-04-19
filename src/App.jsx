@@ -335,11 +335,22 @@ export default function App() {
     setHovered(prev => prev?.id === found?.id ? prev : found)
   }, [])
 
-  const handleClick = useCallback(() => {
-    setSelected(prev => hovered
-      ? prev?.id === hovered.id ? null : hovered
-      : null
-    )
+  const handleClick = useCallback(e => {
+    // On touch devices mousemove never fires, so hovered is null at click time.
+    // Do a fresh hit-test using the click coordinates as the source of truth.
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const t = transformRef.current
+    const wx = (e.clientX - rect.left - t.x) / t.k
+    const wy = (e.clientY - rect.top - t.y) / t.k
+    let found = null, minD = Infinity
+    for (const n of nodesRef.current) {
+      const d = Math.hypot(n.wx - wx, n.wy - wy)
+      if (d <= n.r && d < minD) { minD = d; found = n }
+    }
+    const target = found ?? hovered
+    setSelected(prev => target ? (prev?.id === target.id ? null : target) : null)
   }, [hovered])
 
   const handleSidebarHover = useCallback((node, e) => {
